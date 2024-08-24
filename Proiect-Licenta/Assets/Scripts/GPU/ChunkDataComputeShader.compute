@@ -1,0 +1,54 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#include "MyDataStructs.cginc"
+#pragma kernel FillArray
+#pragma kernel ClearArray
+
+RWStructuredBuffer<Voxel> voxels;
+RWStructuredBuffer<HeightMap> map;
+uint chunkWidth;
+uint chunkHeight;
+
+uint getVoxelIndex(uint3 idx)
+{
+    return idx.z + idx.y * (chunkWidth + 2) + idx.x * (chunkWidth + 2) * chunkHeight;
+}
+
+uint getMapIndex(uint3 idx)
+{
+    return idx.z + idx.x * (chunkWidth + 2);
+}
+
+[numthreads(8,8,8)]
+void FillArray(uint3 id : SV_DispatchThreadID)
+{
+    if (any(id.xz > chunkWidth + 2))
+        return;
+    
+    HeightMap currentMap = map[getMapIndex(id)];
+    uint heigth = GetSolid(currentMap);
+    
+    Voxel voxel;
+    voxel.ID = 1;
+    
+    Voxel emptyVoxel;
+    emptyVoxel.ID = 0;
+    
+    int index = getVoxelIndex(id);
+    if (id.y < heigth)
+        voxels[index] = voxel;
+    else
+        voxels[index] = emptyVoxel;
+}
+
+[numthreads(8, 8, 8)]
+void ClearArray(uint3 id : SV_DispatchThreadID)
+{
+    Voxel emptyVoxel;
+    emptyVoxel.ID = 0;
+    
+    HeightMap emptyMap;
+    emptyMap.data = 0;
+    
+    voxels[getVoxelIndex(id)] = emptyVoxel;
+    map[getMapIndex(id)] = emptyMap;
+}

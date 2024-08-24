@@ -1,0 +1,53 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#include "MyDataStructs.cginc"
+
+#pragma kernel GenerateHeightMap
+int seed;
+RWStructuredBuffer<HeightMap> map;
+float3 chunkPosition;
+uint chunkWidth;
+uint chunkHeight;
+
+
+uint getMapIndex(uint3 idx)
+{
+    return idx.z + idx.x * (chunkWidth + 2);
+}
+
+float dropOff(float x)
+{
+    float v = 1 - abs(x);
+    return 3 * v * v - 2 * v * v * v;
+}
+float noise(uint3 id)
+{
+    float2 g = normalize(float2(0.2, 0.1));
+    float2 v = float2(id.xy) / (1 * 0.5) - float2(1.0, 1.0); // 1 = era un float "res" 
+    return dot(g, v) * dropOff(v.x) * dropOff(v.y);
+}
+
+uint GetHeigth(int2 pos, uint2 id)
+{
+    uint heigth = (pos.x + pos.y) % (uint) 2 == 0 ? chunkHeight : (uint)1;
+    if (any(id.xy < (uint)3) || any(id.xy > chunkWidth - (uint)2))
+        heigth = chunkHeight - 1;
+    if (any(id.xy < (uint)2) || any(id.xy > chunkWidth - (uint)1))
+        heigth = chunkHeight;
+    return heigth;
+}
+
+[numthreads(8, 1, 8)]
+void GenerateHeightMap(uint3 id : SV_DispatchThreadID)
+{
+    if (any(id.xz > chunkWidth + 2) || id.y != 0)
+        return;
+    
+    HeightMap currentMap;
+    currentMap.data = 0;
+    
+    int2 pos2 = int2(chunkPosition.x * chunkWidth + id.x - 1, chunkPosition.z * chunkWidth + id.z - 1);
+    SetSolid(currentMap, GetHeigth(pos2, id.xz));
+    SetLiquidBottom(currentMap, 0);
+    SetLiquidTop(currentMap, 0);
+    map[getMapIndex(id)] = currentMap;
+}
