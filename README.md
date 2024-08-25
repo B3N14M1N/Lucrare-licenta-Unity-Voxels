@@ -6,5 +6,7 @@
  Chunkurile sunt generate dupa un set de reguli, par identice insa sunt generate independent, voi adauga generarea folosing noise layers.
  
  
- Proiectul este in lucru insa in videoclipul urmator este prezentat progresul: https://github.com/user-attachments/assets/763661c5-b7ad-40e0-bae0-dc1394d29966
+ Proiectul este in lucru insa in videoclipul urmator este prezentat progresul:
+ 
+ https://github.com/user-attachments/assets/763661c5-b7ad-40e0-bae0-dc1394d29966
 
