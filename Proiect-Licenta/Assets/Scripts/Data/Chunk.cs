@@ -117,7 +117,7 @@ public class Chunk : MonoBehaviour
                 meshFilter.sharedMesh = null;
                 Destroy(this.mesh);
             }
-            Debug.Log("The new mesh has " + mesh.vertexCount + " vertices and " + mesh.GetIndices(0).Length + " triangles.");
+            //Debug.Log("The new mesh has " + mesh.vertexCount + " vertices and " + mesh.GetIndices(0).Length + " triangles.");
             this.mesh = mesh;
             meshFilter.sharedMesh = this.mesh;
             meshCollider.sharedMesh = this.mesh;
@@ -125,7 +125,7 @@ public class Chunk : MonoBehaviour
         }
         else
         {
-            Debug.Log("New mesh is null");
+            //Debug.Log("New mesh is null");
         }
     }
 

@@ -41,9 +41,10 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     uint maxHeight = GetSolid(currentMap);
     if (id.y < maxHeight)
     {
+        /*
         if(!stressTest && id.y < maxHeight-1)
             return;
-        
+        */
         Voxel block = voxelArray[getVoxelIndex(id)];
         uint3 blockPos = uint3(id.x - 1, id.y, id.z - 1);
         if (block.ID == 0)
@@ -74,8 +75,9 @@ void CSMain(uint3 id : SV_DispatchThreadID)
                 normalBuffer[vertCount + j] = FaceCheck[i];
                 
                 uvBuffer[vertCount + j] = verticeUVs[j];
-
-                colorBuffer[vertCount + j] = float4(float(id.x) / chunkWidth, float(id.y) / chunkHeight, float(id.z) / chunkWidth, float(255));
+                float vertexColor = float(id.y) / (chunkHeight);
+                //colorBuffer[vertCount + j] = float4(float(id.x) / chunkWidth, float(id.y) / chunkHeight, float(id.z) / chunkWidth, float(255));
+                colorBuffer[vertCount + j] = float4(vertexColor, vertexColor, vertexColor, float(255));
             }
         
             for (int k = 0; k < 6; k++)

@@ -102,13 +102,16 @@ static uint GetLiquidBottom(HeightMap map)
 /*
  *  Noise Parameters
  */
-
+ 
 struct NoiseParameters
 {
-    float scale;
-    float frequency;
+    float noiseScale;
+    uint octaves;
     float lacunarity;
     float persistence;
-    int octaves;
+    float blending;
+    float damping;
+    float maxHeight;
+    uint ePow;
 };
 #endif

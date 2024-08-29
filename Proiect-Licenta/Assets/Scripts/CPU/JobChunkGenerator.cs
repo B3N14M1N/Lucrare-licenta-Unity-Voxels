@@ -2,6 +2,7 @@ using System;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
+using Unity.Mathematics;
 using UnityEngine;
 
 public class JobChunkGenerator
@@ -10,6 +11,9 @@ public class JobChunkGenerator
     public NativeArray<HeightMap> heightMaps;
     public MeshDataStruct meshData;
     public Vector3 chunkPos;
+    private NativeArray<NoiseParameters> noiseParameters;
+    private NativeArray<Vector2Int> octaveOffsets;
+    private float globalScale;
 
     public bool GenerationStarted { get; private set; }
     public bool DataScheduled { get; private set; }
@@ -23,12 +27,15 @@ public class JobChunkGenerator
     private ChunkMeshJob meshJob;
     public JobHandle meshHandle;
 
-    public JobChunkGenerator(Vector3 chunkPos)
+    public JobChunkGenerator(Vector3 chunkPos, NoiseParameters[] noiseParameters, Vector2Int[] octaveOffsets, float globalScale)
     {
         this.chunkPos = chunkPos;
+        this.globalScale = globalScale;
         GenerationStarted = false;
         DataGenerated = false;
         MeshGenerated = false;
+        this.noiseParameters = new NativeArray<NoiseParameters>(noiseParameters, Allocator.Persistent);
+        this.octaveOffsets = new NativeArray<Vector2Int>(octaveOffsets, Allocator.Persistent);
         ScheduleDataGeneration();
     }
 
@@ -46,7 +53,10 @@ public class JobChunkGenerator
                 chunkHeight = WorldSettings.ChunkHeight,
                 voxels = this.voxels,
                 heightMaps = this.heightMaps,
-                chunkPos = chunkPos,
+                chunkPos = this.chunkPos,
+                noiseParameters = this.noiseParameters,
+                octaveOffsets = this.octaveOffsets,
+                globalScale = this.globalScale,
             };
             GenerationStarted = true;
             DataScheduled = true;
@@ -110,6 +120,8 @@ public class JobChunkGenerator
         dataHandle.Complete();
         meshHandle.Complete();
         meshData.Dispose();
+        if(noiseParameters.IsCreated) noiseParameters.Dispose();
+        if(octaveOffsets.IsCreated) octaveOffsets.Dispose();
         if(voxels.IsCreated) voxels.Dispose();
         if(heightMaps.IsCreated) heightMaps.Dispose();
     }
@@ -120,11 +132,19 @@ public class JobChunkGenerator
 public struct ChunkDataJob : IJob
 {
     [ReadOnly]
+    public float globalScale;
+    [ReadOnly]
     public int chunkWidth;
     [ReadOnly]
     public int chunkHeight;
     [ReadOnly]
     public Vector3 chunkPos;
+    [ReadOnly]
+    public bool stress;
+    [ReadOnly]
+    public NativeArray<NoiseParameters> noiseParameters;
+    [ReadOnly]
+    public NativeArray<Vector2Int> octaveOffsets;
 
     public NativeArray<Voxel> voxels;
     public NativeArray<HeightMap> heightMaps;
@@ -137,8 +157,30 @@ public struct ChunkDataJob : IJob
         {
             for (int z = 0; z < chunkWidth + 2; z++)
             {
+                int height = 0;
                 HeightMap heightMap = new HeightMap() { data = 0 };
-                int height = GetHeigth((int)chunkPos.x + x, (int)chunkPos.z + z, x, z);
+                if (stress)
+                {
+                    height = GetHeigthStress((int)chunkPos.x + x, (int)chunkPos.z + z, x, z);
+                }
+                else
+                {
+                    float fHeight = 0;
+                    for (int i = 0; i < noiseParameters.Length; i++)
+                    {
+                        fHeight += GetHeight((int)chunkPos.x * chunkWidth + x - 1, (int)chunkPos.z * chunkWidth + z - 1, noiseParameters[i]);
+                    }
+                    height = Mathf.FloorToInt(fHeight / noiseParameters.Length * (chunkHeight - 1));
+
+                    if(height <= 0)
+                        height = 1;
+
+                    if(height > chunkHeight)
+                    {
+                        height = chunkHeight;
+                    }
+                }
+
                 ReadWriteStructs.SetSolid(ref heightMap, (uint)height);
                 heightMaps[getMapIndex(x, z)] = heightMap;
                 for (int y = 0; y < chunkHeight; y++)
@@ -154,14 +196,34 @@ public struct ChunkDataJob : IJob
         }
     }
 
-    int GetHeigth(int x, int z, int xLocal, int zLocal)
+    int GetHeigthStress(int x, int z, int xLocal, int zLocal)
     {
         int heigth = (xLocal + zLocal) % 2 == 0 ? chunkHeight : 1;
-        if ((xLocal < 3 || zLocal < 3) || (xLocal > chunkWidth - 2 || zLocal > chunkWidth - 2))
-            heigth = chunkHeight - 1;
-        if ((xLocal < 2 || zLocal < 2) || (xLocal > chunkWidth - 1 || zLocal > chunkWidth - 1))
-            heigth = chunkHeight;
         return heigth;
+    }
+
+    float GetHeight(int x, int y, NoiseParameters param)
+    {
+        float height = 0;
+        float amplitude = 1;
+        float frequency = 1;
+
+        float max = 0;
+        for (int i = 0; i < param.octaves; i++)
+        {
+            float sampleX = (x + octaveOffsets[i].x) / param.noiseScale / globalScale * frequency;
+            float sampleZ = (y + octaveOffsets[i].y) / param.noiseScale / globalScale * frequency;
+
+            float value = Mathf.PerlinNoise(sampleX, sampleZ);
+            height += value * amplitude / param.damping;
+            max += amplitude;
+            amplitude *= -param.persistence;
+            frequency *= param.lacunarity;
+        }
+        height = (Mathf.Pow(Mathf.Abs(height), param.ePow) / Mathf.Pow(Mathf.Abs(max), param.ePow));
+        if (height > param.maxHeight)
+            height = param.maxHeight;
+        return height * param.blending;
     }
     int getVoxelIndex(int x, int y, int z)
     {
@@ -347,8 +409,10 @@ public struct ChunkMeshJob : IJob
                     if (ReadWriteStructs.GetVoxelType(voxel) == 0)
                         continue;
 
+                    /*
                     if (!stressTest && y < maxHeight - 1)
                         continue;
+                    */
                     Vector3 voxelPos = new Vector3(x - 1, y, z - 1);
 
                     bool surrounded = true;
@@ -372,7 +436,9 @@ public struct ChunkMeshJob : IJob
                             meshData.uvs[meshData.count[0] + j] = VerticeUVs[j];
                             meshData.normals[meshData.count[0] + j] = FaceCheck[i];
                             //meshData.colors32[meshData.count[0]] = new Color32((byte)x, (byte)y, (byte)z, 255);
-                            meshData.colors32[meshData.count[0]] = new Color(((float)x) / chunkWidth, ((float)y) / chunkHeight, ((float)z) / chunkWidth, 255f);
+                            //meshData.colors32[meshData.count[0]] = new Color(((float)x) / chunkWidth, ((float)y) / chunkHeight, ((float)z) / chunkWidth, 255f);
+                            float color = ((float)(y) / chunkHeight);
+                            meshData.colors32[meshData.count[0] + j] = new Color(color, color, color, 255f);
                         }
                         for(int k = 0; k < 6; k++)
                         {

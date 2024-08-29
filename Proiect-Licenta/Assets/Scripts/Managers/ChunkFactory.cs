@@ -1,11 +1,17 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.Rendering;
 
 public class ChunkFactory : MonoBehaviour
 {
     #region Fields
+    [Header("Noise Parameters")]
+    public NoiseParametersScriptableObject noiseParameters;
+    private Vector2Int[] octaveOffsets;
+    private ComputeBuffer noiseParametersBuffer;
+    private ComputeBuffer octavesBuffer;
 
     [Header("Compute Shaders")]
     private int xThreads;
@@ -58,7 +64,6 @@ public class ChunkFactory : MonoBehaviour
         xThreads = (WorldSettings.ChunkWidth + 2) / 8 + 1;
         yThreads = WorldSettings.ChunkHeight / 8;
         //yThreads = 1;
-        voxelHeightGenerator.SetInt("seed", WorldSettings.Seed);
         voxelHeightGenerator.SetInt("chunkWidth", WorldSettings.ChunkWidth);
         voxelHeightGenerator.SetInt("chunkHeight", WorldSettings.ChunkHeight);
 
@@ -68,12 +73,35 @@ public class ChunkFactory : MonoBehaviour
 
         voxelMeshGenerator.SetInt("chunkWidth", WorldSettings.ChunkWidth);
         voxelMeshGenerator.SetInt("chunkHeight", WorldSettings.ChunkHeight);
-
+        InitSeed();
         for (int i = 0; i < count; i++)
         {
             CreateNewNoiseBuffer();
             CreateNewMeshBuffer();
         }
+    }
+
+    public void InitSeed()
+    {
+        uint octavesMax = 0;
+        for (int i = 0; i < noiseParameters.noise.Count; i++)
+        {
+            if (noiseParameters.noise[i].octaves > octavesMax)
+                octavesMax = noiseParameters.noise[i].octaves;
+        }
+        octaveOffsets = new Vector2Int[octavesMax];
+        System.Random rnd = new System.Random((int)WorldSettings.Seed);
+        for (int i = 0; i < octavesMax; i++)
+        {
+            octaveOffsets[i] = new Vector2Int(rnd.Next(-10000, 10000), rnd.Next(-10000, 10000));
+        }
+        octavesBuffer?.Dispose();
+        octavesBuffer = new ComputeBuffer((int)octavesMax, 8);
+        octavesBuffer.SetData(octaveOffsets);
+
+        noiseParametersBuffer?.Dispose();
+        noiseParametersBuffer = new ComputeBuffer(noiseParameters.noise.Count, 8 * 4);
+        noiseParametersBuffer.SetData(noiseParameters.noise);
     }
 
     #endregion
@@ -114,7 +142,7 @@ public class ChunkFactory : MonoBehaviour
                 }
                 else
                 {
-                    JobChunkGenerator job = new JobChunkGenerator(chunk.chunkPosition);
+                    JobChunkGenerator job = new JobChunkGenerator(chunk.chunkPosition, noiseParameters.noise.ToArray(), octaveOffsets.ToArray(), noiseParameters.globalScale);
                     jobsGenerating.Add(job);
                 }
             }
@@ -221,9 +249,14 @@ public class ChunkFactory : MonoBehaviour
     {
         ChunkDataBuffer noiseBuffer = GetNoiseBuffer();
         noiseBuffer.InitializeBuffer();
-
+        voxelHeightGenerator.SetBool("stress", WorldSettings.StressTest);
+        voxelHeightGenerator.SetInt("noiseParametersCount", noiseParameters.noise.Count);
+        voxelHeightGenerator.SetFloat("globalScale", noiseParameters.globalScale);
         voxelHeightGenerator.SetVector("chunkPosition", pos);
         voxelHeightGenerator.SetBuffer(0, "map", noiseBuffer.mapBuffer);
+        voxelHeightGenerator.SetBuffer(0, "octaveOffsets", octavesBuffer);
+        voxelHeightGenerator.SetBuffer(0, "noiseParameters", noiseParametersBuffer);
+
         voxelHeightGenerator.Dispatch(0, xThreads, 1, xThreads);
 
         AsyncGPUReadback.Request(noiseBuffer.mapBuffer, (callback) =>
@@ -335,7 +368,9 @@ public class ChunkFactory : MonoBehaviour
 
     public void Dispose()
     {
-        while(availableNoiseComputeBuffers.Count > 0)
+        noiseParametersBuffer?.Dispose();
+        octavesBuffer?.Dispose();
+        while (availableNoiseComputeBuffers.Count > 0)
             availableNoiseComputeBuffers.Dequeue().Dispose();
         availableNoiseComputeBuffers.Clear();
 

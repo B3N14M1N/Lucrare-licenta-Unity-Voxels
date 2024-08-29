@@ -12,13 +12,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fc23e446cb3f555479833b94a795b1db, type: 3}
   m_Name: World Setting
   m_EditorClassIdentifier: 
-  ChunkWidth: 16
-  ChunkHeight: 32
+  ChunkWidth: 8
+  ChunkHeight: 64
   HeightStep: 1
-  LoadDistance: 4
-  SimulateDistance: 3
-  RenderDistance: 3
-  ChunksProcessedPerFrame: 3
+  LoadDistance: 6
+  SimulateDistance: 1
+  RenderDistance: 6
+  ChunksProcessedPerFrame: 1
   ChunksToLoadPerFrame: 1
   StressTest: 0
   Disposing: 0

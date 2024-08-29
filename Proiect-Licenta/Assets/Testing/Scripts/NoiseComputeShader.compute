@@ -1,0 +1,79 @@
+#pragma kernel CSMain
+
+#include "MyDataStructs.cginc"
+
+struct NoiseParameters
+{
+    float noiseScale;
+    uint octaves;
+    float lacunarity;
+    float persistence;
+    float blending;
+    float damping;
+    float maxHeight;
+    uint ePow;
+};
+
+int2 offset;
+float globalScale;
+uint chunkHeight;
+uint noiseParametersCount;
+RWStructuredBuffer<NoiseParameters> noiseParameters;
+RWTexture2D<float4> Result;
+RWStructuredBuffer<int2> octaveOffsets;
+
+float Remap(float from, float fromMin, float fromMax, float toMin, float toMax)
+{
+    float fromAbs = from - fromMin;
+    float fromMaxAbs = fromMax - fromMin;
+
+    float normal = fromAbs / fromMaxAbs;
+
+    float toMaxAbs = toMax - toMin;
+    float toAbs = toMaxAbs * normal;
+
+    float to = toAbs + toMin;
+
+    return to;
+}
+
+float GetHeight(float3 id, NoiseParameters param)
+{
+    float height = 0;
+    float amplitude = 1;
+    float frequency = 1;
+    
+    float max = 0;
+    for (uint i = 0; i < param.octaves; i++)
+    {
+        float sampleX = (id.x + offset.x + octaveOffsets[i].x) / param.noiseScale / globalScale * frequency;
+        float sampleZ = (id.y + offset.y + octaveOffsets[i].y) / param.noiseScale / globalScale * frequency;
+        
+        float value = snoise(float3(sampleX, sampleZ, 1.0));
+        height += value * amplitude / param.damping;
+        max += amplitude;
+        amplitude *= -param.persistence;
+        frequency *= param.lacunarity;
+    }
+    height = (pow(abs(height), param.ePow) / pow(abs(max), param.ePow));
+    if(height > param.maxHeight)
+        height = param.maxHeight;
+    return height * param.blending;
+}
+
+[numthreads(8,8,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    float height = 0;
+    float3 idf = float3(id.x, id.y, id.z);
+    for (uint i = 0; i < noiseParametersCount; i++)
+    {
+        float value = GetHeight(idf, noiseParameters[i]);
+        height += value;
+    }
+    
+    height = Remap(height, 0, noiseParametersCount, 0, chunkHeight - 1);
+    
+    float pixelColor = float(height / chunkHeight);
+    Result[id.xy] = float4(pixelColor, pixelColor, pixelColor, 0.0);
+}
