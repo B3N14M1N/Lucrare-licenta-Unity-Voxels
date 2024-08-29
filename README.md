@@ -8,5 +8,7 @@
  
  Proiectul este in lucru insa in videoclipul urmator este prezentat progresul:
  
- https://github.com/user-attachments/assets/763661c5-b7ad-40e0-bae0-dc1394d29966
+
+
+https://github.com/user-attachments/assets/099a3992-45cc-4502-88a7-edf227c385e8
 
