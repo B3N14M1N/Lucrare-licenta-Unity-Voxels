@@ -52,6 +52,7 @@ Material:
     m_Ints: []
     m_Floats:
     - _Ambient_Occulusion: 1
+    - _Height: 0.015625
     - _Metallic: 0
     - _QueueControl: 0
     - _QueueOffset: 0

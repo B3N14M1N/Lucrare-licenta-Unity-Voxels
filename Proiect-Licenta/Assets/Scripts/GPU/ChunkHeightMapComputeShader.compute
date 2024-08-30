@@ -21,22 +21,7 @@ uint getMapIndex(uint3 idx)
     return idx.z + idx.x * (chunkWidth + 2);
 }
 
-float Remap(float from, float fromMin, float fromMax, float toMin, float toMax)
-{
-    float fromAbs = from - fromMin;
-    float fromMaxAbs = fromMax - fromMin;
-
-    float normal = fromAbs / fromMaxAbs;
-
-    float toMaxAbs = toMax - toMin;
-    float toAbs = toMaxAbs * normal;
-
-    float to = toAbs + toMin;
-
-    return to;
-}
-
-float GetHeight(float3 id, NoiseParameters param)
+float GetHeight(float2 id, NoiseParameters param)
 {
     float height = 0;
     float amplitude = 1;
@@ -48,7 +33,7 @@ float GetHeight(float3 id, NoiseParameters param)
         float sampleX = (id.x + octaveOffsets[i].x) / param.noiseScale / globalScale * frequency;
         float sampleZ = (id.y + octaveOffsets[i].y) / param.noiseScale / globalScale * frequency;
         
-        float value = snoise(float3(sampleX, sampleZ, 1.0));
+        float value = snoise(float3(sampleX, sampleZ, 0.0));
         height += value * amplitude / param.damping;
         max += amplitude;
         amplitude *= -param.persistence;
@@ -60,7 +45,7 @@ float GetHeight(float3 id, NoiseParameters param)
     return height * param.blending;
 }
 
-uint GetHeigthStress(int2 pos, uint2 id)
+uint GetHeigthStress(int2 pos)
 {
     uint heigth = (pos.x + pos.y) % (uint) 2 == 0 ? chunkHeight : (uint)1;
     //if (any(id.xy < (uint)3) || any(id.xy > chunkWidth - (uint)2))
@@ -73,32 +58,37 @@ uint GetHeigthStress(int2 pos, uint2 id)
 [numthreads(8, 1, 8)]
 void GenerateHeightMap(uint3 id : SV_DispatchThreadID)
 {
-    if (any(id.xz > chunkWidth + 2) || id.y != 0)
+    if (any(id.xz > chunkWidth + 2))
         return;
     
     HeightMap currentMap;
     currentMap.data = 0;
 
     uint height = 0;
-    int2 pos2 = int2(int(chunkPosition.x) * chunkWidth + id.x - 1, int(chunkPosition.z) * chunkWidth + id.z - 1);
     if(stress)
     {
-        height = GetHeigthStress(pos2, id.xz);
+        int2 pos2 = int2(int(chunkPosition.x - 1) * int(chunkWidth) + int(id.x) , int(chunkPosition.z - 1) * int(chunkWidth) + int(id.z));
+        height = GetHeigthStress(pos2);
     }
     else
     {
         float fHeight = 0;
-        float3 idf = float3(chunkPosition.x * chunkWidth + id.x - 1, chunkPosition.z * chunkWidth + id.z - 1, 0);
+        float2 idf = float2(chunkPosition.x * float(chunkWidth) + float(id.x) - 1.0, chunkPosition.z * float(chunkWidth) + float(id.z) - 1.0);
         for (uint i = 0; i < noiseParametersCount; i++)
         {
             fHeight += GetHeight(idf, noiseParameters[i]);
         }
-        height = uint((fHeight/noiseParametersCount) * chunkHeight); 
-        //height = uint(Remap(fHeight, 0, float(noiseParametersCount), 0.0, float(chunkHeight)));
-    }
-    SetSolid(currentMap, height);
-    SetLiquidBottom(currentMap, 0);
-    SetLiquidTop(currentMap, 0);
+        height = uint(floor((fHeight/noiseParametersCount) * (chunkHeight - 1.0)));
 
-    map[getMapIndex(id)] = currentMap;
+        if(height <= 0)
+            height = 1;
+        if(height > chunkHeight)
+            height = chunkHeight;
+     }
+
+     SetSolid(currentMap, height);
+     SetLiquidBottom(currentMap, 0);
+     SetLiquidTop(currentMap, 0);
+
+     map[getMapIndex(id)] = currentMap;
 }

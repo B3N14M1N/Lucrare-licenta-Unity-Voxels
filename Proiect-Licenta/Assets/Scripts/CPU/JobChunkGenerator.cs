@@ -49,6 +49,7 @@ public class JobChunkGenerator
             heightMaps = new NativeArray<HeightMap>((WorldSettings.ChunkWidth + 2) * (WorldSettings.ChunkWidth + 2), Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
             dataJob = new ChunkDataJob()
             {
+                stress = WorldSettings.StressTest,
                 chunkWidth = WorldSettings.ChunkWidth,
                 chunkHeight = WorldSettings.ChunkHeight,
                 voxels = this.voxels,
@@ -83,7 +84,6 @@ public class JobChunkGenerator
 
             meshJob = new ChunkMeshJob()
             {
-                stressTest = WorldSettings.StressTest,
                 chunkWidth = WorldSettings.ChunkWidth,
                 chunkHeight = WorldSettings.ChunkHeight,
                 voxels = this.voxels,
@@ -293,8 +293,6 @@ public struct ChunkMeshJob : IJob
     #region Input
 
     [ReadOnly]
-    public bool stressTest;
-    [ReadOnly]
     public int chunkWidth;
     [ReadOnly]
     public int chunkHeight;
@@ -409,10 +407,6 @@ public struct ChunkMeshJob : IJob
                     if (ReadWriteStructs.GetVoxelType(voxel) == 0)
                         continue;
 
-                    /*
-                    if (!stressTest && y < maxHeight - 1)
-                        continue;
-                    */
                     Vector3 voxelPos = new Vector3(x - 1, y, z - 1);
 
                     bool surrounded = true;
@@ -438,7 +432,7 @@ public struct ChunkMeshJob : IJob
                             //meshData.colors32[meshData.count[0]] = new Color32((byte)x, (byte)y, (byte)z, 255);
                             //meshData.colors32[meshData.count[0]] = new Color(((float)x) / chunkWidth, ((float)y) / chunkHeight, ((float)z) / chunkWidth, 255f);
                             float color = ((float)(y) / chunkHeight);
-                            meshData.colors32[meshData.count[0] + j] = new Color(color, color, color, 255f);
+                            meshData.colors32[meshData.count[0] + j] = new Color(color, 0, 0, 0);
                         }
                         for(int k = 0; k < 6; k++)
                         {
@@ -465,87 +459,3 @@ public struct ChunkMeshJob : IJob
     }
     #endregion
 }
-
-/*
-public static class VoxelMeshData
-{
-
-    public static NativeArray<Vector3> Vertices = new NativeArray<Vector3>(8, Allocator.Persistent)
-    {
-        [0] = new Vector3(0, 1, 0), //0
-        [1] = new Vector3(1, 1, 0), //1
-        [2] = new Vector3(1, 1, 1), //2
-        [3] = new Vector3(0, 1, 1), //3
-
-        [4] = new Vector3(0, 0, 0), //4
-        [5] = new Vector3(1, 0, 0), //5
-        [6] = new Vector3(1, 0, 1), //6
-        [7] = new Vector3(0, 0, 1) //7
-    };
-
-    public static NativeArray<Vector3> FaceCheck = new NativeArray<Vector3>(6, Allocator.Persistent)
-    {
-        [0] = new Vector3(0, 0, -1), //back 0
-        [1] = new Vector3(1, 0, 0), //right 1
-        [2] = new Vector3(0, 0, 1), //front 2
-        [3] = new Vector3(-1, 0, 0), //left 3
-        [4] = new Vector3(0, 1, 0), //top 4
-        [5] = new Vector3(0, -1, 0) //bottom 5
-    };
-
-    public static NativeArray<int> FaceVerticeIndex = new NativeArray<int>(24, Allocator.Persistent)
-    {
-        [0] = 4,
-        [1] = 5,
-        [2] = 1,
-        [3] = 0,
-        [4] = 5,
-        [5] = 6,
-        [6] = 2,
-        [7] = 1,
-        [8] = 6,
-        [9] = 7,
-        [10] = 3,
-        [11] = 2,
-        [12] = 7,
-        [13] = 4,
-        [14] = 0,
-        [15] = 3,
-        [16] = 0,
-        [17] = 1,
-        [18] = 2,
-        [19] = 3,
-        [20] = 7,
-        [21] = 6,
-        [22] = 5,
-        [23] = 4,
-    };
-
-    public static NativeArray<Vector2> VerticeUVs = new NativeArray<Vector2>(5, Allocator.Persistent)
-    {
-        [0] = new Vector2(0, 0),
-        [1] = new Vector2(1, 0),
-        [2] = new Vector2(1, 1),
-        [3] = new Vector2(0, 1)
-    };
-
-    public static NativeArray<int> FaceIndices = new NativeArray<int>(6, Allocator.Persistent)
-    {
-        [0] = 0,
-        [1] = 3,
-        [2] = 2,
-        [3] = 0,
-        [4] = 2,
-        [5] = 1
-    };
-
-    public static void Dispose()
-    {
-        if(vertices.IsCreated) vertices.Dispose();
-        if(faceCheck.IsCreated) faceCheck.Dispose();
-        if(faceVerticeIndex.IsCreated) faceVerticeIndex.Dispose();
-        if(verticeUVs.IsCreated) verticeUVs.Dispose();
-        if(faceIndices.IsCreated) faceIndices.Dispose();
-    }
-}
-*/

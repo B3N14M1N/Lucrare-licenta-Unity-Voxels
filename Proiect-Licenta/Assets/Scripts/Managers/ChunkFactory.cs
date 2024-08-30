@@ -272,9 +272,8 @@ public class ChunkFactory : MonoBehaviour
 
                 meshBuffer.countBuffer.SetCounterValue(0);
                 meshBuffer.countBuffer.SetData(new uint[] { 0, 0 });
-                voxelMeshGenerator.SetBuffer(0, "counter", meshBuffer.countBuffer);
 
-                voxelMeshGenerator.SetBool("stressTest", WorldSettings.StressTest);
+                voxelMeshGenerator.SetBuffer(0, "counter", meshBuffer.countBuffer);
                 voxelMeshGenerator.SetBuffer(0, "voxelArray", noiseBuffer.voxelsBuffer);
                 voxelMeshGenerator.SetBuffer(0, "map", noiseBuffer.mapBuffer);
                 voxelMeshGenerator.SetBuffer(0, "vertexBuffer", meshBuffer.vertexBuffer);
