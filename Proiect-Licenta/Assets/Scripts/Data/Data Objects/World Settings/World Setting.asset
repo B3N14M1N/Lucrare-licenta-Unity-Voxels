@@ -18,8 +18,8 @@ MonoBehaviour:
   LoadDistance: 12
   SimulateDistance: 1
   RenderDistance: 12
-  ChunksProcessedPerFrame: 1
-  ChunksToLoadPerFrame: 1
+  ChunksProcessedPerFrame: 20
+  ChunksToLoadPerFrame: 20
   StressTest: 0
   Disposing: 0
   Mode: 0

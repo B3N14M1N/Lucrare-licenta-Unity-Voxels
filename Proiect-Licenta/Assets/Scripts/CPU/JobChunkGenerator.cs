@@ -61,7 +61,7 @@ public class JobChunkGenerator
             };
             GenerationStarted = true;
             DataScheduled = true;
-            dataHandle = dataJob.Schedule();
+            dataHandle = dataJob.Schedule(heightMaps.Length, 1);
         }
     }
     public bool CompleteDataGeneration()
@@ -129,7 +129,7 @@ public class JobChunkGenerator
 
 
 [BurstCompile]
-public struct ChunkDataJob : IJob
+public struct ChunkDataJob : IJobParallelFor
 {
     [ReadOnly]
     public float globalScale;
@@ -146,52 +146,52 @@ public struct ChunkDataJob : IJob
     [ReadOnly]
     public NativeArray<Vector2Int> octaveOffsets;
 
+    [NativeDisableParallelForRestriction]
     public NativeArray<Voxel> voxels;
     public NativeArray<HeightMap> heightMaps;
 
-    public void Execute()
+    public void Execute(int index)
     {
+        int x = index / (chunkWidth + 2);
+        int z = index % (chunkWidth + 2);
+
         Voxel solid = new Voxel() { ID = 1 };
         Voxel emptyVoxel = new Voxel() { ID = 0 };
-        for(int x = 0; x < chunkWidth + 2; x++)
+        HeightMap heightMap = new HeightMap() { data = 0 };
+        int height;
+
+        if (stress)
         {
-            for (int z = 0; z < chunkWidth + 2; z++)
+            height = GetHeigthStress((int)chunkPos.x + x, (int)chunkPos.z + z, x, z);
+        }
+        else
+        {
+            float fHeight = 0;
+            int sampleX = (int)chunkPos.x * chunkWidth + x - 1, sampleZ = (int)chunkPos.z * chunkWidth + z - 1;
+            for (int i = 0; i < noiseParameters.Length; i++)
             {
-                int height = 0;
-                HeightMap heightMap = new HeightMap() { data = 0 };
-                if (stress)
-                {
-                    height = GetHeigthStress((int)chunkPos.x + x, (int)chunkPos.z + z, x, z);
-                }
-                else
-                {
-                    float fHeight = 0;
-                    for (int i = 0; i < noiseParameters.Length; i++)
-                    {
-                        fHeight += GetHeight((int)chunkPos.x * chunkWidth + x - 1, (int)chunkPos.z * chunkWidth + z - 1, noiseParameters[i]);
-                    }
-                    height = Mathf.FloorToInt(fHeight / noiseParameters.Length * (chunkHeight - 1));
+                fHeight += GetHeight(sampleX, sampleZ, noiseParameters[i]);
+            }
+            height = Mathf.FloorToInt(fHeight / noiseParameters.Length * (chunkHeight - 1));
 
-                    if(height <= 0)
-                        height = 1;
+            if (height <= 0)
+                height = 1;
 
-                    if(height > chunkHeight)
-                    {
-                        height = chunkHeight;
-                    }
-                }
+            if (height > chunkHeight)
+            {
+                height = chunkHeight;
+            }
+        }
 
-                ReadWriteStructs.SetSolid(ref heightMap, (uint)height);
-                heightMaps[getMapIndex(x, z)] = heightMap;
-                for (int y = 0; y < chunkHeight; y++)
-                {
-                    int voxelIndex = getVoxelIndex(x, y, z);
-                    voxels[voxelIndex] = emptyVoxel;
-                    if (y < height)
-                    {
-                        voxels[voxelIndex] = solid;
-                    }
-                }
+        ReadWriteStructs.SetSolid(ref heightMap, (uint)height);
+        heightMaps[index] = heightMap;
+        for (int y = 0; y < chunkHeight; y++)
+        {
+            int voxelIndex = getVoxelIndex(x, y, z);
+            voxels[voxelIndex] = emptyVoxel;
+            if (y < height)
+            {
+                voxels[voxelIndex] = solid;
             }
         }
     }
@@ -202,7 +202,7 @@ public struct ChunkDataJob : IJob
         return heigth;
     }
 
-    float GetHeight(int x, int y, NoiseParameters param)
+    float GetHeight(int x, int z, NoiseParameters param)
     {
         float height = 0;
         float amplitude = 1;
@@ -212,7 +212,7 @@ public struct ChunkDataJob : IJob
         for (int i = 0; i < param.octaves; i++)
         {
             float sampleX = (x + octaveOffsets[i].x) / param.noiseScale / globalScale * frequency;
-            float sampleZ = (y + octaveOffsets[i].y) / param.noiseScale / globalScale * frequency;
+            float sampleZ = (z + octaveOffsets[i].y) / param.noiseScale / globalScale * frequency;
 
             float value = Mathf.PerlinNoise(sampleX, sampleZ);
             height += value * amplitude / param.damping;
@@ -234,6 +234,7 @@ public struct ChunkDataJob : IJob
     {
         return z + x * (chunkWidth + 2);
     }
+
 }
 
 [Serializable]
@@ -254,11 +255,12 @@ public struct MeshDataStruct
             Dispose();
         Initialized = true;
         count = new NativeArray<int>(2, Allocator.Persistent);
-        vertices = new NativeArray<Vector3>(WorldSettings.RenderedVoxelsPerChunk * 6 * 4, Allocator.Persistent);
-        indices = new NativeArray<int>(WorldSettings.RenderedVoxelsPerChunk * 6 * 6, Allocator.Persistent);
-        normals = new NativeArray<Vector3>(WorldSettings.RenderedVoxelsPerChunk * 6 * 4, Allocator.Persistent);
-        uvs = new NativeArray<Vector2>(WorldSettings.RenderedVoxelsPerChunk * 6 * 4, Allocator.Persistent);
-        colors32 = new NativeArray<Color>(WorldSettings.RenderedVoxelsPerChunk * 6 * 4, Allocator.Persistent);
+        //divide by 2 -> cant be more vertices& faces than half of the voxels.
+        vertices = new NativeArray<Vector3>(WorldSettings.RenderedVoxelsPerChunk * 6 * 4 / 2, Allocator.Persistent);
+        indices = new NativeArray<int>(WorldSettings.RenderedVoxelsPerChunk * 6 * 6 /2, Allocator.Persistent);
+        normals = new NativeArray<Vector3>(WorldSettings.RenderedVoxelsPerChunk * 6 * 4 / 2, Allocator.Persistent);
+        uvs = new NativeArray<Vector2>(WorldSettings.RenderedVoxelsPerChunk * 6 * 4 / 2, Allocator.Persistent);
+        colors32 = new NativeArray<Color>(WorldSettings.RenderedVoxelsPerChunk * 6 * 4 / 2, Allocator.Persistent);
     }
     public void Dispose()
     {
@@ -401,6 +403,9 @@ public struct ChunkMeshJob : IJob
             for (int z = 1; z <= chunkWidth; z++)
             {
                 int maxHeight = (int)(ReadWriteStructs.GetSolid(heightMaps[getMapIndex(x, z)])) - 1;
+                ////////////////////////////////////////////////////////////
+                ///
+                //maxHeight = chunkHeight-1;
                 for (int y = maxHeight; y >= 0; y--)
                 {
                     Voxel voxel = voxels[getVoxelIndex(x, y, z)];
